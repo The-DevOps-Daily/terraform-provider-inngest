@@ -10,16 +10,21 @@ env="${1:-production}"
 redact() {
   python3 -c '
 import json, re, sys
+secret = re.compile(r"sk-inn-[A-Za-z0-9_-]+|signkey-[A-Za-z0-9]+-[A-Za-z0-9]+|https?://inn\.gs/e/[^\s\x22\x27]+")
+def clean(s):
+    return secret.sub("<redacted>", s)
 raw = sys.stdin.read()
 try:
     doc = json.loads(raw)
 except ValueError:
-    print(raw[:2000]); sys.exit(0)
+    print(clean(raw[:2000])); sys.exit(0)
 def walk(v):
     if isinstance(v, dict):
         return {k: ("<redacted>" if k in ("key", "url") and isinstance(x, str) else walk(x)) for k, x in v.items()}
     if isinstance(v, list):
         return [walk(x) for x in v]
+    if isinstance(v, str):
+        return clean(v)
     return v
 print(json.dumps(walk(doc), indent=2)[:6000])
 '

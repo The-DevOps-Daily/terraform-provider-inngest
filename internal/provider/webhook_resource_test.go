@@ -316,3 +316,85 @@ func TestMockWebhookRateLimited(t *testing.T) {
 		},
 	})
 }
+
+// An environment known only at apply time may differ from the current one, so
+// the plan must already be a replacement; deciding at apply time would make
+// Terraform refuse the changed action.
+func TestMockWebhookUnknownEnvironment(t *testing.T) {
+	skipWithoutTerraform(t)
+	api, url := newFakeAPI(t)
+	api.addEnv("staging", "TEST")
+	cfg := func(env string) string {
+		return fakeProviderConfig(url) + fmt.Sprintf(`resource "terraform_data" "env" { input = %q }
+`, env) + webhookConfig("Stripe", stripeTransform, `  environment = terraform_data.env.output`)
+	}
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg("production"),
+				Check:  resource.TestCheckResourceAttr("inngest_webhook.stripe", "environment", "production"),
+			},
+			{
+				Config: cfg("staging"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction("inngest_webhook.stripe", plancheck.ResourceActionDestroyBeforeCreate)},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("inngest_webhook.stripe", "environment", "staging"),
+					func(*terraform.State) error {
+						if len(api.webhooks) != 1 || api.webhooks[0].Env != "staging" {
+							return fmt.Errorf("webhooks = %+v", api.webhooks)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// A failed prerequisite is an error, never a reason to drop state: a 404 from
+// the account-level lists must not read as "the resource is gone".
+func TestMockAccountLevel404KeepsState(t *testing.T) {
+	skipWithoutTerraform(t)
+	api, url := newFakeAPI(t)
+	p := fakeProviderConfig(url)
+	both := p + `resource "inngest_environment" "staging" { name = "staging" }
+` + webhookConfig("Stripe", stripeTransform, "")
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: both},
+			{
+				// The environment refresh fails instead of planning a create.
+				PreConfig:   func() { api.envsAccountMissing = true },
+				Config:      both,
+				ExpectError: regexp.MustCompile(`Account not found`),
+			},
+			{
+				// Deleting the webhook needs the signing key; the failed
+				// lookup must fail the destroy and keep the webhook.
+				PreConfig: func() {
+					api.envsAccountMissing = false
+					api.keysAccountMissing = true
+				},
+				Config:      p + `resource "inngest_environment" "staging" { name = "staging" }`,
+				ExpectError: regexp.MustCompile(`(?s)signing key.*Account not found`),
+				Check: func(*terraform.State) error {
+					if len(api.webhooks) != 1 {
+						return fmt.Errorf("webhook gone: %+v", api.webhooks)
+					}
+					return nil
+				},
+			},
+			{
+				PreConfig: func() { api.keysAccountMissing = false },
+				Config:    both,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
+}

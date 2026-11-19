@@ -47,6 +47,9 @@ type fakeAPI struct {
 	throttle map[string]int
 	// calls counts requests by "METHOD /path".
 	calls map[string]int
+	// envsAccountMissing and keysAccountMissing answer GET /v2/envs and
+	// GET /v2/keys/* with the spec's 404 "account not found".
+	envsAccountMissing, keysAccountMissing bool
 }
 
 type fakeEnv struct {
@@ -244,7 +247,11 @@ func omitDefaults(m map[string]any) map[string]any {
 }
 
 func (e *fakeEnv) json() map[string]any {
-	return omitDefaults(map[string]any{"id": e.ID, "name": e.Name, "type": e.Type, "createdAt": e.CreatedAt, "isArchived": e.Archived})
+	m := omitDefaults(map[string]any{"id": e.ID, "name": e.Name, "type": e.Type, "createdAt": e.CreatedAt, "isArchived": e.Archived})
+	if e.Type == client.EnvTypeProduction {
+		delete(m, "type") // the enum's zero value
+	}
+	return m
 }
 
 func (wh *fakeWebhook) json() map[string]any {
@@ -285,6 +292,10 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/v2")
+	if (f.envsAccountMissing && path == "/envs") || (f.keysAccountMissing && strings.HasPrefix(path, "/keys/")) {
+		writeErr(w, http.StatusNotFound, "not_found", "Account not found")
+		return
+	}
 	switch {
 	case path == "/envs" && r.Method == http.MethodGet:
 		var rows []map[string]any
@@ -407,7 +418,7 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		var rows []map[string]any
 		for _, a := range f.apps[e.Name] {
 			if (a["isArchived"] == true) == archived {
-				rows = append(rows, a)
+				rows = append(rows, omitDefaults(a))
 			}
 		}
 		f.writePage(w, r, rows, 100, 20)

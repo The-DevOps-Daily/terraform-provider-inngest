@@ -32,6 +32,14 @@ type AppSync struct {
 	URL         string `json:"url,omitempty"`
 }
 
+// setDefaults fills in the method when the API leaves out the enum's zero
+// value, UNSPECIFIED.
+func (a *App) setDefaults() {
+	if a.Method == "" {
+		a.Method = "UNSPECIFIED"
+	}
+}
+
 // appPageLimit is the largest page GET /v2/apps allows.
 const appPageLimit = 100
 
@@ -42,7 +50,11 @@ func (c *Client) ListApps(ctx context.Context, env string, archived bool) ([]App
 	if archived {
 		q.Set("archived", strconv.FormatBool(true))
 	}
-	return listAll[App](ctx, c, "/v2/apps", env, q, appPageLimit)
+	apps, err := listAll[App](ctx, c, "/v2/apps", env, q, appPageLimit)
+	for i := range apps {
+		apps[i].setDefaults()
+	}
+	return apps, err
 }
 
 // GetApp fetches one app by its user-defined ID (GET /v2/apps/{appId}).
@@ -51,5 +63,6 @@ func (c *Client) GetApp(ctx context.Context, env, id string) (*App, error) {
 	if err := c.do(ctx, request{method: http.MethodGet, path: "/v2/apps/" + url.PathEscape(id), env: env}, &out); err != nil {
 		return nil, err
 	}
+	out.Data.setDefaults()
 	return &out.Data, nil
 }

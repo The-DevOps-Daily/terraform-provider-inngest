@@ -85,7 +85,7 @@ func (c *Client) GetWebhook(ctx context.Context, env, id string) (*Webhook, erro
 			return &hooks[i], nil
 		}
 	}
-	return nil, notFound("/v2/env/webhooks", "webhook "+id)
+	return nil, &MissingError{What: "webhook " + id + " in environment " + env}
 }
 
 // UpdateWebhook changes a webhook's name and transform
@@ -126,7 +126,9 @@ func (c *Client) doV1(ctx context.Context, env string, r request) error {
 
 	keys, err := c.ListSigningKeys(ctx, env)
 	if err != nil {
-		return fmt.Errorf("the v1 webhook API needs the environment's signing key, and listing signing keys for environment %q failed: %w", env, err)
+		// Not wrapped with %w: a 404 here is about the key list, and must not
+		// read as "the webhook is already gone".
+		return fmt.Errorf("the v1 webhook API needs the environment's signing key, and listing signing keys for environment %q failed: %v", env, err)
 	}
 	type candidate struct{ token, keyID, form string }
 	var candidates []candidate

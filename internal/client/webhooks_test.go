@@ -163,7 +163,22 @@ func TestGetWebhookFromList(t *testing.T) {
 	if err != nil || wh.Name != "B" || wh.EventFilter.Filter != FilterDeny {
 		t.Fatalf("wh=%+v err=%v", wh, err)
 	}
-	if _, err := c.GetWebhook(context.Background(), "staging", "c"); !IsNotFound(err) {
+	if _, err := c.GetWebhook(context.Background(), "staging", "c"); !IsMissing(err) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// When the signing key lookup answers 404, a delete must fail, not look like
+// "the webhook is already gone".
+func TestV1KeyLookup404IsNotWebhook404(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"errors":[{"code":"not_found","message":"account not found"}]}`)
+	}))
+	defer srv.Close()
+	c, _ := newTestClient(t, srv)
+	err := c.DeleteWebhook(context.Background(), "staging", "wh1")
+	if err == nil || IsNotFound(err) || !strings.Contains(err.Error(), "account not found") {
 		t.Fatalf("err = %v", err)
 	}
 }

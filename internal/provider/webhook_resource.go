@@ -164,7 +164,17 @@ func (r *webhookResource) ModifyPlan(ctx context.Context, req resource.ModifyPla
 	}
 	var configured types.String
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("environment"), &configured)...)
-	if resp.Diagnostics.HasError() || configured.IsUnknown() {
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if configured.IsUnknown() {
+		// The environment is only known at apply time. It may differ from
+		// the current one, so plan a replacement now: deciding at apply
+		// time would change the planned action, which Terraform refuses.
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("environment"), types.StringUnknown())...)
+		if !req.State.Raw.IsNull() {
+			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("environment"))
+		}
 		return
 	}
 	want := types.StringValue(r.data.resourceEnv(configured))
@@ -224,7 +234,7 @@ func (r *webhookResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	wh, err := r.data.client.GetWebhook(ctx, env, state.ID.ValueString())
 	if err != nil {
-		if client.IsNotFound(err) {
+		if client.IsMissing(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}

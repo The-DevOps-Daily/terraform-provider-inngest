@@ -147,7 +147,7 @@ func (r *environmentResource) Read(ctx context.Context, req resource.ReadRequest
 
 	env, err := r.data.client.GetEnv(ctx, state.ID.ValueString())
 	if err != nil {
-		if client.IsNotFound(err) {
+		if client.IsMissing(err) {
 			if state.Archived.ValueBool() {
 				// The list may leave archived environments out. One that is
 				// archived in state is kept rather than planned again.
@@ -264,15 +264,12 @@ func mapEnvironment(env *client.Env, m *environmentResourceModel) {
 	}
 }
 
-// mergePatchedEnv copies the fields a PATCH response sent onto env, except the
-// name, which only a refresh updates. Fields the response leaves out keep
-// their value.
+// mergePatchedEnv copies what a PATCH answer says onto env. The name and type
+// are left alone (only a refresh updates them), since a sparse protobuf JSON
+// answer leaves default values out.
 func mergePatchedEnv(patched, env *client.Env) {
 	if patched == nil {
 		return
-	}
-	if patched.Type != "" {
-		env.Type = patched.Type
 	}
 	if patched.CreatedAt != "" {
 		env.CreatedAt = patched.CreatedAt

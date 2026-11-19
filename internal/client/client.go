@@ -20,6 +20,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -117,11 +118,10 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("the Inngest API answered %s %s with %d: %s", e.Method, e.Path, e.StatusCode, msg)
 }
 
-// IsNotFound reports whether err is a 404 from the API, or a lookup that found
-// nothing.
+// IsNotFound reports whether err is a 404 answer to the request itself, such
+// as DELETE /v1/webhooks/{id} for a webhook that is already gone.
 func IsNotFound(err error) bool {
-	var apiErr *APIError
-	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+	return IsStatus(err, http.StatusNotFound)
 }
 
 // IsStatus reports whether err is an API error with the given status.
@@ -130,9 +130,19 @@ func IsStatus(err error, status int) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode == status
 }
 
-// notFound builds the error a list lookup returns when the item is missing.
-func notFound(path, what string) error {
-	return &APIError{Method: http.MethodGet, Path: path, StatusCode: http.StatusNotFound, Code: "not_found", Message: what + " not found"}
+// MissingError is returned when a list call worked but did not contain the
+// item asked for. Only this error means a resource is gone: a 404 from the
+// list itself (for example "account not found") does not.
+type MissingError struct {
+	What string
+}
+
+func (e *MissingError) Error() string { return e.What + " not found" }
+
+// IsMissing reports whether err is a MissingError.
+func IsMissing(err error) bool {
+	var m *MissingError
+	return errors.As(err, &m)
 }
 
 // request describes one API call.
@@ -236,7 +246,7 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 			continue
 		}
 		if res.StatusCode >= http.StatusBadRequest {
-			return parseError(r.method, r.path, res.StatusCode, data)
+			return parseError(r.method, r.path, res.StatusCode, data, c.APIKey, token)
 		}
 		if out != nil && len(bytes.TrimSpace(data)) > 0 {
 			if err := json.Unmarshal(data, out); err != nil {
@@ -293,7 +303,7 @@ func (c *Client) backoff(attempt int, retryAfter string) time.Duration {
 
 // parseError reads the v2 error shape {"errors":[{"code","message"}]}, the
 // {"error": "..."} shape, or a bare string body.
-func parseError(method, path string, status int, data []byte) error {
+func parseError(method, path string, status int, data []byte, secrets ...string) error {
 	apiErr := &APIError{Method: method, Path: path, StatusCode: status}
 	trimmed := bytes.TrimSpace(data)
 
@@ -332,10 +342,27 @@ func parseError(method, path string, status int, data []byte) error {
 			apiErr.Message = string(trimmed)
 		}
 	}
+	apiErr.Message = redact(apiErr.Message, secrets...)
 	if len(apiErr.Message) > maxErrorBody {
 		apiErr.Message = apiErr.Message[:maxErrorBody] + "..."
 	}
 	return apiErr
+}
+
+// secretPatterns match credentials and webhook URLs that an error body might
+// echo back: API keys, signing keys (as given or hashed), event keys and
+// webhook ingest URLs.
+var secretPatterns = regexp.MustCompile(`sk-inn-[A-Za-z0-9_-]+|signkey-[A-Za-z0-9]+-[A-Za-z0-9]+|https?://inn\.gs/e/[^\s"']+`)
+
+// redact hides the given secrets and anything shaped like an Inngest
+// credential, so a diagnostic never shows one.
+func redact(msg string, secrets ...string) string {
+	for _, s := range secrets {
+		if len(s) >= 8 {
+			msg = strings.ReplaceAll(msg, s, "[redacted]")
+		}
+	}
+	return secretPatterns.ReplaceAllString(msg, "[redacted]")
 }
 
 // listAll walks every page of a v2 list endpoint.

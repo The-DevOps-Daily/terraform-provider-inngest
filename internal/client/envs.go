@@ -41,7 +41,20 @@ const envPageLimit = 250
 
 // ListEnvs returns every environment of the account (GET /v2/envs).
 func (c *Client) ListEnvs(ctx context.Context) ([]Env, error) {
-	return listAll[Env](ctx, c, "/v2/envs", "", nil, envPageLimit)
+	envs, err := listAll[Env](ctx, c, "/v2/envs", "", nil, envPageLimit)
+	for i := range envs {
+		envs[i].setDefaults()
+	}
+	return envs, err
+}
+
+// setDefaults fills in the type when the API leaves it out. The service
+// speaks protobuf JSON, which omits an enum's zero value, and the zero value
+// of v2EnvType is PRODUCTION (the spec's default).
+func (e *Env) setDefaults() {
+	if e.Type == "" {
+		e.Type = EnvTypeProduction
+	}
 }
 
 // GetEnv finds one environment by ID. The API has no read-one endpoint, so
@@ -56,7 +69,7 @@ func (c *Client) GetEnv(ctx context.Context, id string) (*Env, error) {
 			return &envs[i], nil
 		}
 	}
-	return nil, notFound("/v2/envs", "environment "+id)
+	return nil, &MissingError{What: "environment " + id}
 }
 
 // CreateEnv creates a custom environment (POST /v2/envs).
@@ -65,11 +78,13 @@ func (c *Client) CreateEnv(ctx context.Context, req CreateEnvRequest) (*Env, err
 	if err := c.do(ctx, request{method: http.MethodPost, path: "/v2/envs", body: req}, &out); err != nil {
 		return nil, err
 	}
+	out.Data.setDefaults()
 	return &out.Data, nil
 }
 
 // PatchEnv changes an environment (PATCH /v2/envs/{id}). Only the archived
-// flag can change.
+// flag can change. The answer is returned as sent: callers keep the other
+// fields from what they already know.
 func (c *Client) PatchEnv(ctx context.Context, id string, req PatchEnvRequest) (*Env, error) {
 	var out envelope[Env]
 	if err := c.do(ctx, request{method: http.MethodPatch, path: "/v2/envs/" + url.PathEscape(id), body: req}, &out); err != nil {

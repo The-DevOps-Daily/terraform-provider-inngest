@@ -258,7 +258,7 @@ func TestPagination(t *testing.T) {
 	if err != nil || got.Name != "b" {
 		t.Fatalf("GetEnv = %+v, %v", got, err)
 	}
-	if _, err := c.GetEnv(context.Background(), "nope"); !IsNotFound(err) {
+	if _, err := c.GetEnv(context.Background(), "nope"); !IsMissing(err) || IsNotFound(err) {
 		t.Fatalf("missing env: %v", err)
 	}
 }
@@ -371,5 +371,66 @@ func TestApps(t *testing.T) {
 	}
 	if _, err := c.GetApp(context.Background(), "production", "missing"); !IsNotFound(err) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// A 404 from the list itself (the spec's "account not found") is an error,
+// not a missing environment.
+func TestListNotFoundIsNotMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"errors":[{"code":"not_found","message":"account not found"}]}`)
+	}))
+	defer srv.Close()
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetEnv(context.Background(), "e1")
+	if err == nil || IsMissing(err) {
+		t.Fatalf("err = %v", err)
+	}
+	_, err = c.GetWebhook(context.Background(), "production", "w1")
+	if err == nil || IsMissing(err) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// protobuf JSON leaves out enum zero values: PRODUCTION and UNSPECIFIED.
+func TestEnumDefaults(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/envs":
+			_, _ = io.WriteString(w, `{"data":[{"id":"p","name":"production"},{"id":"s","name":"staging","type":"TEST"}],"page":{"hasMore":false}}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":{"id":"a","name":"a"}}`)
+		}
+	}))
+	defer srv.Close()
+	c, _ := newTestClient(t, srv)
+	envs, err := c.ListEnvs(context.Background())
+	if err != nil || envs[0].Type != EnvTypeProduction || envs[1].Type != EnvTypeTest {
+		t.Fatalf("envs=%+v err=%v", envs, err)
+	}
+	app, err := c.GetApp(context.Background(), "", "a")
+	if err != nil || app.Method != "UNSPECIFIED" {
+		t.Fatalf("app=%+v err=%v", app, err)
+	}
+}
+
+func TestErrorsRedactSecrets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"errors":[{"code":"bad","message":"token sk-inn-api-test rejected; key signkey-prod-0123abcd and https://inn.gs/e/SECRETTOKEN are not allowed; custom my-private-token-123"}]}`)
+	}))
+	defer srv.Close()
+	c, _ := newTestClient(t, srv)
+	c.APIKey = "my-private-token-123"
+	_, err := c.ListEnvs(context.Background())
+	msg := err.Error()
+	for _, secret := range []string{"sk-inn-api-test", "signkey-prod-0123abcd", "SECRETTOKEN", "my-private-token-123"} {
+		if strings.Contains(msg, secret) {
+			t.Errorf("error message shows %q: %s", secret, msg)
+		}
+	}
+	if !strings.Contains(msg, "[redacted]") || !strings.Contains(msg, "rejected") {
+		t.Fatalf("message = %s", msg)
 	}
 }

@@ -46,7 +46,11 @@ and prints the responses with keys and URLs redacted. Then run
    shows the `tf-acc-` environment with `isArchived: true`.
 6. **What `POST /v2/envs` creates.** The spec's example answers with
    `"type": "BRANCH"`; the docs call these "custom environments". `type` is
-   computed, so either works. Check the type in the probe output. The
+   computed, so either works. Check the type in the probe output. protobuf
+   JSON leaves out an enum's zero value, which for `v2EnvType` is
+   `PRODUCTION`, so an environment without `type` is read as production (and
+   never archived on destroy); check that the production row in the probe
+   output has no other type. The
    request's optional `id` field has no description, so it is never sent.
 7. **A duplicate name answers 409.** The spec lists 409 ("Conflict - account
    already exists", copied from another endpoint). The provider adds an

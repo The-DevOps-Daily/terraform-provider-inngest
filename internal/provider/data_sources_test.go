@@ -56,6 +56,7 @@ data "inngest_webhooks" "staging" { environment = "staging" }
 					resource.TestCheckResourceAttr("data.inngest_environments.branches", "environments.#", "2"),
 					resource.TestCheckResourceAttr("data.inngest_environments.branches", "environments.1.archived", "true"),
 					resource.TestCheckResourceAttr("data.inngest_environment.staging", "type", "TEST"),
+					resource.TestCheckResourceAttr("data.inngest_environments.active", "environments.0.type", "PRODUCTION"),
 					resource.TestCheckResourceAttr("data.inngest_environment.staging", "archived", "false"),
 					resource.TestCheckResourceAttrPair("data.inngest_environment.by_id", "name", "data.inngest_environment.staging", "name"),
 					resource.TestCheckResourceAttr("data.inngest_event_keys.staging", "keys.#", "2"),
@@ -71,6 +72,8 @@ data "inngest_webhooks" "staging" { environment = "staging" }
 					resource.TestCheckResourceAttr("data.inngest_apps.archived", "apps.0.id", "legacy"),
 					resource.TestCheckResourceAttr("data.inngest_apps.archived", "apps.0.archived", "true"),
 					resource.TestCheckNoResourceAttr("data.inngest_apps.archived", "apps.0.latest_sync"),
+					// Left out of the response as the enum's zero value.
+					resource.TestCheckResourceAttr("data.inngest_apps.archived", "apps.0.method", "UNSPECIFIED"),
 					resource.TestCheckResourceAttr("data.inngest_app.billing", "function_count", "3"),
 					resource.TestCheckResourceAttr("data.inngest_app.billing", "method", "SERVE"),
 					resource.TestCheckResourceAttr("data.inngest_app.billing", "latest_sync.status", "success"),
