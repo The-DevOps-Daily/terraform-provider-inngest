@@ -1,0 +1,24 @@
+# Compiled provider binary
+terraform-provider-inngest
+dist/
+
+# Downloaded API specs (see testdata/README.md)
+testdata/spec/
+
+# Go
+*.test
+*.out
+vendor/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

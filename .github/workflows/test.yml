@@ -1,0 +1,119 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      # The plan/apply/import tests run the real Terraform CLI against an
+      # in-process fake of the Inngest API.
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - run: go mod download
+      - run: go build ./...
+      - run: go vet ./...
+      # The specs are not committed (see testdata/README.md). With them, the
+      # client tests check every endpoint, field and enum against the specs.
+      - name: Download the Inngest OpenAPI specs
+        run: sh scripts/fetch-spec.sh
+      - name: Unit and fake-API tests
+        env:
+          INNGEST_REQUIRE_SPEC: "1"
+          INNGEST_REQUIRE_TERRAFORM: "1"
+          CHECKPOINT_DISABLE: "1"
+        run: go test ./... -count=1 -timeout 600s
+
+  examples:
+    name: Example plans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      # Validates every example against this build, and plans the complete
+      # example with no API key: nothing may call the API before apply.
+      - name: Validate and plan examples
+        env:
+          CHECKPOINT_DISABLE: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -o "$RUNNER_TEMP/bin/terraform-provider-inngest" .
+          cat > "$RUNNER_TEMP/dev.tfrc" <<EOF
+          provider_installation {
+            dev_overrides {
+              "the-devops-daily/inngest" = "$RUNNER_TEMP/bin"
+            }
+            direct {}
+          }
+          EOF
+          export TF_CLI_CONFIG_FILE="$RUNNER_TEMP/dev.tfrc"
+          for dir in examples/complete examples/provider; do
+            echo "::group::$dir"
+            (cd "$dir" && terraform validate)
+            echo "::endgroup::"
+          done
+          for dir in examples/resources/* examples/data-sources/*; do
+            echo "::group::$dir"
+            cp examples/provider/provider.tf "$dir/zz_provider.tf"
+            (cd "$dir" && terraform validate)
+            rm "$dir/zz_provider.tf"
+            echo "::endgroup::"
+          done
+          cd examples/complete
+          terraform plan -input=false
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Run golangci-lint with `go run` so it is built with the module's Go
+      # version; prebuilt binaries can lag it and refuse to load the config.
+      - name: golangci-lint
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+      - name: gofmt
+        run: test -z "$(gofmt -s -l .)" || (gofmt -s -l . && exit 1)
+
+  docs:
+    name: Docs up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --provider-name inngest
+      - name: Check docs are committed
+        run: |
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            echo "docs/ is out of date. Run 'make docs' and commit the result."
+            git diff docs/
+            exit 1
+          fi
