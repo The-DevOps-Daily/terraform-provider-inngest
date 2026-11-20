@@ -4,7 +4,7 @@
 [![Acceptance](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/workflows/acceptance.yml/badge.svg)](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/workflows/acceptance.yml)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](go.mod)
-<!-- Enable after publishing: [![Terraform Registry](https://img.shields.io/badge/Terraform-Registry-844FBA.svg)](https://registry.terraform.io/providers/the-devops-daily/inngest/latest) -->
+[![Terraform Registry](https://img.shields.io/badge/Terraform-Registry-844FBA.svg)](https://registry.terraform.io/providers/The-DevOps-Daily/inngest/latest)
 
 A Terraform provider for [Inngest](https://www.inngest.com) environments and
 webhooks, built on the
@@ -43,7 +43,8 @@ archived ones do not count.
 terraform {
   required_providers {
     inngest = {
-      source = "the-devops-daily/inngest"
+      source  = "The-DevOps-Daily/inngest"
+      version = "~> 0.1"
     }
   }
 }
