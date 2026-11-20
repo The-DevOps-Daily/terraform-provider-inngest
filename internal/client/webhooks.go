@@ -140,7 +140,7 @@ func (c *Client) doV1(ctx context.Context, env string, r request, override ...st
 		var err error
 		keys, err = c.ListSigningKeys(ctx, env)
 		if IsStatus(err, http.StatusForbidden) {
-			return errors.New("Inngest API keys cannot read signing keys. Set signing_key on the provider or the webhook (or INNGEST_SIGNING_KEY) to the environment's signing key from the Inngest dashboard.")
+			return errors.New("Inngest API keys cannot read signing keys. Set signing_key on the provider or the webhook (or INNGEST_SIGNING_KEY) to the environment's signing key from the Inngest dashboard")
 		}
 		if err != nil {
 			// A 404 here is about the key list, never a missing webhook.
