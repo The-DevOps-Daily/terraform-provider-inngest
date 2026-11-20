@@ -148,7 +148,7 @@ func TestV1SigningKeyLookupForbidden(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = io.WriteString(w, `{"errors":[{"code":"access_denied","message":"API key does not allow this operation"}]}`)
 	}))
-	want := "Inngest API keys cannot read signing keys. Set signing_key on the provider or the webhook (or INNGEST_SIGNING_KEY) to the environment's signing key from the Inngest dashboard"
+	want := "inngest API keys cannot read signing keys. Set signing_key on the provider or the webhook (or INNGEST_SIGNING_KEY) to the environment's signing key from the Inngest dashboard"
 	for _, call := range []func() error{
 		func() error { return c.DeleteWebhook(context.Background(), "", "wh1") },
 		func() error {
