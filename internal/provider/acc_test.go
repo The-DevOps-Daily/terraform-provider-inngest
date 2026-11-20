@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -25,7 +26,9 @@ import (
 //     in that environment to also test inngest_app.
 
 func accClient() *client.Client {
-	return client.New(os.Getenv(envAPIKey), os.Getenv(envBaseURL), "terraform-provider-inngest/acc-test")
+	c := client.New(os.Getenv(envAPIKey), os.Getenv(envBaseURL), "terraform-provider-inngest/acc-test")
+	c.SigningKey = os.Getenv(envSigningKey)
+	return c
 }
 
 func TestAccEnvironment(t *testing.T) {
@@ -55,7 +58,7 @@ func TestAccEnvironment(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("inngest_environment.test", "name", name),
 					resource.TestCheckResourceAttrSet("inngest_environment.test", "id"),
-					resource.TestCheckResourceAttrSet("inngest_environment.test", "type"),
+					resource.TestCheckNoResourceAttr("inngest_environment.test", "type"),
 					resource.TestCheckResourceAttr("inngest_environment.test", "archived", "false"),
 				),
 			},
@@ -88,19 +91,9 @@ data "inngest_environment" "test" {
   name       = %q
   depends_on = [inngest_environment.test]
 }
-data "inngest_signing_keys" "test" {
-  environment = %q
-  depends_on  = [inngest_environment.test]
-}
-data "inngest_event_keys" "test" {
-  environment = %q
-  depends_on  = [inngest_environment.test]
-}
-`, name, name, name),
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrPair("data.inngest_environment.test", "id", "inngest_environment.test", "id"),
-					resource.TestCheckResourceAttrSet("data.inngest_signing_keys.test", "keys.0.key"),
-					resource.TestCheckResourceAttrSet("data.inngest_event_keys.test", "keys.#"),
 				),
 			},
 		},
@@ -109,6 +102,9 @@ data "inngest_event_keys" "test" {
 
 func TestAccWebhook(t *testing.T) {
 	testAccPreCheck(t)
+	if os.Getenv(envSigningKey) == "" {
+		t.Skip("INNGEST_SIGNING_KEY is required for real webhook updates and cleanup")
+	}
 	env := accEnvironment()
 	name := accName()
 	cfg := func(name, eventPrefix, extra string) string {
@@ -225,18 +221,12 @@ data "inngest_environments" "all" {
   include_archived = true
 }
 data "inngest_environment" "env" { name = %[1]q }
-data "inngest_event_keys" "env" { environment = %[1]q }
-data "inngest_signing_keys" "env" { environment = %[1]q }
-data "inngest_signing_keys" "default" {}
 data "inngest_apps" "env" { environment = %[1]q }
 data "inngest_webhooks" "env" { environment = %[1]q }
 `, env)
 	checks := []resource.TestCheckFunc{
 		resource.TestCheckResourceAttrSet("data.inngest_environments.all", "environments.0.id"),
 		resource.TestCheckResourceAttrSet("data.inngest_environment.env", "id"),
-		resource.TestCheckResourceAttrSet("data.inngest_event_keys.env", "keys.#"),
-		resource.TestCheckResourceAttrSet("data.inngest_signing_keys.env", "keys.0.key"),
-		resource.TestCheckResourceAttrSet("data.inngest_signing_keys.default", "keys.0.key"),
 		resource.TestCheckResourceAttrSet("data.inngest_apps.env", "apps.#"),
 		resource.TestCheckResourceAttrSet("data.inngest_webhooks.env", "webhooks.#"),
 	}
@@ -254,4 +244,20 @@ data "inngest_webhooks" "env" { environment = %[1]q }
 			{Config: config, Check: resource.ComposeAggregateTestCheckFunc(checks...)},
 		},
 	})
+}
+
+// Ordinary API keys cannot read either endpoint, even with all resource access.
+func TestAccKeysDenied(t *testing.T) {
+	testAccPreCheck(t)
+	for _, kind := range []string{"event_keys", "signing_keys"} {
+		t.Run(kind, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{{
+					Config:      fmt.Sprintf("data \"inngest_%s\" \"keys\" { environment = %q }", kind, accEnvironment()),
+					ExpectError: regexp.MustCompile(`(?s)API\s+keys\s+cannot\s+read\s+keys.*credential\s+with\s+key\s+access`),
+				}},
+			})
+		})
+	}
 }

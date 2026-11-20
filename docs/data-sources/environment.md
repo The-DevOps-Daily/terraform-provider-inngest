@@ -34,4 +34,4 @@ output "production_environment_id" {
 
 - `archived` (Boolean) Whether the environment is archived.
 - `created_at` (String) Creation time (RFC 3339).
-- `type` (String) Environment type: `PRODUCTION`, `TEST` or `BRANCH`.
+- `type` (String) Environment type: `PRODUCTION`, `TEST` or `BRANCH`, or null when omitted by the API (including custom environments and production).

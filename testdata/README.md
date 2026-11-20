@@ -26,3 +26,12 @@ Other public sources used:
 - The v2 service definition in the open source server, for field limits
   (webhook names up to 128 characters) and the zero value of enums:
   https://github.com/inngest/inngest/blob/main/proto/api/v2/service.proto
+
+## Real API observations
+
+The 2026-11-20 run confirmed differences from the spec examples: custom and
+production environments omit `type`, API keys receive 403 on both key
+endpoints, and webhook lists require `X-Inngest-Env`. The mock API follows
+these observations. Successful key reads use a separate synthetic credential
+solely to test the retained data sources and lookup fallback. See
+[`GAPS.md`](../GAPS.md) for confirmed and unresolved behaviour.

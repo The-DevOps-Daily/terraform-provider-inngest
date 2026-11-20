@@ -147,7 +147,7 @@ func (d *appDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, re
 		Validators:          []validator.String{stringvalidator.LengthAtLeast(1)},
 	}
 	attrs["environment"] = schema.StringAttribute{
-		MarkdownDescription: "Environment of the app, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`; when neither is set, the API uses the production environment.",
+		MarkdownDescription: "Environment of the app, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`.",
 		Optional:            true,
 	}
 	resp.Schema = schema.Schema{
@@ -206,7 +206,7 @@ func (d *appsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 		MarkdownDescription: "Lists the apps of an Inngest environment.",
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.StringAttribute{
-				MarkdownDescription: "Environment to list apps for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`; when neither is set, the API uses the production environment.",
+				MarkdownDescription: "Environment to list apps for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`.",
 				Optional:            true,
 			},
 			"archived": schema.BoolAttribute{

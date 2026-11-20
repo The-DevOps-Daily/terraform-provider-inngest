@@ -37,7 +37,7 @@ func TestMockEnvironment(t *testing.T) {
 				Config: p + `resource "inngest_environment" "staging" { name = "staging" }`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("inngest_environment.staging", "id"),
-					resource.TestCheckResourceAttr("inngest_environment.staging", "type", "BRANCH"),
+					resource.TestCheckNoResourceAttr("inngest_environment.staging", "type"),
 					resource.TestCheckResourceAttr("inngest_environment.staging", "archived", "false"),
 					resource.TestCheckResourceAttrSet("inngest_environment.staging", "created_at"),
 					func(s *terraform.State) error {
@@ -243,7 +243,7 @@ func TestMockEnvironmentProductionNotArchived(t *testing.T) {
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
 				},
-				Check: resource.TestCheckResourceAttr("inngest_environment.prod", "type", "PRODUCTION"),
+				Check: resource.TestCheckNoResourceAttr("inngest_environment.prod", "type"),
 			},
 		},
 	})

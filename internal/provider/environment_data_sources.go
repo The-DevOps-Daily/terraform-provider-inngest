@@ -76,7 +76,7 @@ func (d *environmentDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Computed:            true,
 			},
 			"type": schema.StringAttribute{
-				MarkdownDescription: "Environment type: `PRODUCTION`, `TEST` or `BRANCH`.",
+				MarkdownDescription: "Environment type: `PRODUCTION`, `TEST` or `BRANCH`, or null when omitted by the API (including custom environments and production).",
 				Computed:            true,
 			},
 			"archived": schema.BoolAttribute{
@@ -144,7 +144,7 @@ func (d *environmentsDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 		MarkdownDescription: "Lists the account's Inngest environments, optionally only one type. Use `type = \"BRANCH\"` to list branch environments.",
 		Attributes: map[string]schema.Attribute{
 			"type": schema.StringAttribute{
-				MarkdownDescription: "Only list environments of this type: `PRODUCTION`, `TEST` or `BRANCH`.",
+				MarkdownDescription: "Only list environments explicitly reporting this type: `PRODUCTION`, `TEST` or `BRANCH`. Environments whose type is omitted are excluded.",
 				Optional:            true,
 				Validators:          []validator.String{stringvalidator.OneOf(client.EnvTypes...)},
 			},
@@ -159,7 +159,7 @@ func (d *environmentsDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 					Attributes: map[string]schema.Attribute{
 						"id":         schema.StringAttribute{Computed: true, MarkdownDescription: "Environment ID."},
 						"name":       schema.StringAttribute{Computed: true, MarkdownDescription: "Environment name."},
-						"type":       schema.StringAttribute{Computed: true, MarkdownDescription: "Environment type."},
+						"type":       schema.StringAttribute{Computed: true, MarkdownDescription: "Environment type, or null when omitted by the API."},
 						"archived":   schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the environment is archived."},
 						"created_at": schema.StringAttribute{Computed: true, MarkdownDescription: "Creation time (RFC 3339)."},
 					},

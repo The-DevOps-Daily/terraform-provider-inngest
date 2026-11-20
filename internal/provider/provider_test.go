@@ -96,7 +96,7 @@ func TestProviderEnvironmentVariables(t *testing.T) {
 	skipWithoutTerraform(t)
 	api, url := newFakeAPI(t)
 	api.addEnv("staging", "TEST")
-	t.Setenv(envAPIKey, fakeAPIKey)
+	t.Setenv(envAPIKey, fakeKeyAccessCredential)
 	t.Setenv(envBaseURL, url)
 	t.Setenv(envEnvironment, "staging")
 	resource.UnitTest(t, resource.TestCase{

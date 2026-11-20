@@ -1,9 +1,6 @@
 # Complete example
 
-Creates an Inngest environment, a Stripe webhook in it, and reads the
-environment's event key and signing key, so one `terraform apply` gives an app
-everything it needs to send events to and serve functions from the new
-environment.
+Creates an Inngest environment and a Stripe webhook in one apply.
 
 ```sh
 export INNGEST_API_KEY=sk-inn-api-...
@@ -12,11 +9,16 @@ terraform apply -var environment_name=staging
 terraform output -raw stripe_webhook_url
 ```
 
-Pass the keys on to where the app runs, for example with the GitHub provider's
-`github_actions_secret` or a Kubernetes secret, instead of copying them by
-hand.
+After creation, obtain the environment's event and signing keys from the
+Inngest dashboard. API keys cannot read either key endpoint (403), and the
+API-key settings have no keys permission.
 
-Runs on the free plan. The free plan allows 3 active environments, so archive
-one first if the account already has 3. `terraform destroy` deletes the
-webhook and archives the environment, because the Inngest API cannot delete
-environments.
+Before updating or destroying the webhook, set `INNGEST_SIGNING_KEY` to this
+new environment's signing key. Alternatively set `signing_key` on the provider
+or webhook using a sensitive variable. A webhook override takes precedence.
+Set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` in your application's runtime
+using the keys from the dashboard.
+
+`terraform destroy` deletes the webhook and archives the environment. The v1
+webhook update/delete flow with a supplied signing key is covered by mocks;
+real-API confirmation remains open in [`GAPS.md`](../../GAPS.md).

@@ -17,7 +17,7 @@ import (
 )
 
 // fakeAPI is an in-memory Inngest REST API built from the published specs in
-// testdata/ (see testdata/README.md). It follows what the specs and docs say:
+// testdata/ and real API observations from 2026-11-20.
 //
 //   - v2 takes the API key; v1 takes the environment's signing key, and an API
 //     key on v1 gets a 401 ("API Key authentication (v2 endpoints only)").
@@ -27,7 +27,10 @@ import (
 //   - Lists page with cursor/limit and reject limits outside the documented
 //     range with 400 invalid_field_format.
 //   - X-Inngest-Env picks the environment by name. The webhook endpoints need
-//     it; the key and app endpoints fall back to production without it.
+//     it; the signing endpoint can return env_not_found without it.
+//   - API keys cannot read keys (403). A separate test-only credential models
+//     key access to exercise the retained data sources and lookup fallback.
+//   - Created custom environments and production omit type; branches report BRANCH.
 //   - Responses use protobuf JSON: default values (false, "", the ALLOW enum)
 //     are left out, as grpc-gateway does.
 type fakeAPI struct {
@@ -66,8 +69,19 @@ type fakeWebhook struct {
 
 const fakeAPIKey = "sk-inn-api-test"
 
+// Synthetic credential solely for testing successful key-access responses.
+const fakeKeyAccessCredential = "test-credential-with-key-access"
+
 func newFakeAPI(t *testing.T) (*fakeAPI, string) {
 	t.Helper()
+	f := newFakeAPIState()
+	srv := httptest.NewServer(http.HandlerFunc(f.serve))
+	t.Cleanup(srv.Close)
+	return f, srv.URL
+}
+
+// newFakeAPIState also supports unit tests using an in-process transport.
+func newFakeAPIState() *fakeAPI {
 	f := &fakeAPI{
 		clock:    time.Date(2026, 11, 20, 1, 0, 0, 0, time.UTC),
 		apps:     map[string][]map[string]any{},
@@ -75,9 +89,7 @@ func newFakeAPI(t *testing.T) (*fakeAPI, string) {
 		calls:    map[string]int{},
 	}
 	f.addEnv("production", client.EnvTypeProduction)
-	srv := httptest.NewServer(http.HandlerFunc(f.serve))
-	t.Cleanup(srv.Close)
-	return f, srv.URL
+	return f
 }
 
 // skipWithoutTerraform skips the plan and apply tests when no Terraform CLI
@@ -86,7 +98,7 @@ func newFakeAPI(t *testing.T) (*fakeAPI, string) {
 func skipWithoutTerraform(t *testing.T) {
 	t.Helper()
 	t.Setenv("CHECKPOINT_DISABLE", "1")
-	for _, k := range []string{envAPIKey, envBaseURL, envEnvironment} {
+	for _, k := range []string{envAPIKey, envBaseURL, envEnvironment, envSigningKey} {
 		t.Setenv(k, "")
 	}
 	if os.Getenv("TF_ACC_TERRAFORM_PATH") != "" {
@@ -102,6 +114,14 @@ func skipWithoutTerraform(t *testing.T) {
 
 func fakeProviderConfig(baseURL string) string {
 	return fmt.Sprintf("provider \"inngest\" {\n  api_key  = %q\n  base_url = %q\n}\n", fakeAPIKey, baseURL)
+}
+
+func fakeKeyAccessProviderConfig(baseURL string) string {
+	return strings.ReplaceAll(fakeProviderConfig(baseURL), fakeAPIKey, fakeKeyAccessCredential)
+}
+
+func fakeKeyAccessProviderConfigEnv(baseURL, env string) string {
+	return strings.ReplaceAll(fakeProviderConfigEnv(baseURL, env), fakeAPIKey, fakeKeyAccessCredential)
 }
 
 func fakeProviderConfigEnv(baseURL, env string) string {
@@ -124,7 +144,7 @@ func (f *fakeAPI) addEnv(name, typ string) *fakeEnv {
 	id := f.nextID()
 	e := &fakeEnv{
 		ID: id, Name: name, Type: typ, CreatedAt: f.now(),
-		SigningKey: fmt.Sprintf("signkey-%s-%012x", strings.ToLower(typ), f.seq),
+		SigningKey: fmt.Sprintf("signkey-test-%012x", f.seq),
 		EventKeys:  []string{"evtkey-" + strconv.Itoa(f.seq)},
 	}
 	f.envs = append(f.envs, e)
@@ -249,7 +269,7 @@ func omitDefaults(m map[string]any) map[string]any {
 func (e *fakeEnv) json() map[string]any {
 	m := omitDefaults(map[string]any{"id": e.ID, "name": e.Name, "type": e.Type, "createdAt": e.CreatedAt, "isArchived": e.Archived})
 	if e.Type == client.EnvTypeProduction {
-		delete(m, "type") // the enum's zero value
+		delete(m, "type") // observed on the production environment
 	}
 	return m
 }
@@ -287,7 +307,7 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		f.serveV1(w, r, token)
 		return
 	}
-	if token != fakeAPIKey {
+	if token != fakeAPIKey && token != fakeKeyAccessCredential {
 		writeJSON(w, http.StatusUnauthorized, "Authentication failed")
 		return
 	}
@@ -323,8 +343,8 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, "already_exists", "Environment already exists")
 			return
 		}
-		// The spec's example answers a create with type BRANCH.
-		e := f.addEnv(body.Name, client.EnvTypeBranch)
+		// Real custom environment responses omit type.
+		e := f.addEnv(body.Name, "")
 		f.writeData(w, http.StatusCreated, e.json())
 	case strings.HasPrefix(path, "/envs/") && r.Method == http.MethodPatch:
 		e := f.envByID(strings.TrimPrefix(path, "/envs/"))
@@ -340,7 +360,7 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if body.IsArchived != nil {
-			if *body.IsArchived && e.Type == client.EnvTypeProduction {
+			if *body.IsArchived && (&client.Env{Type: e.Type, Name: e.Name}).IsProduction() {
 				writeErr(w, http.StatusUnprocessableEntity, "invalid_operation", "The production environment cannot be archived")
 				return
 			}
@@ -348,6 +368,14 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.writeData(w, http.StatusOK, e.json())
 	case path == "/keys/events" || path == "/keys/signing":
+		if path == "/keys/signing" && r.Header.Get(client.EnvHeader) == "" {
+			writeErr(w, http.StatusNotFound, "env_not_found", "Environment not found")
+			return
+		}
+		if token != fakeKeyAccessCredential {
+			writeErr(w, http.StatusForbidden, "access_denied", "API key does not allow this operation")
+			return
+		}
 		e := f.headerEnv(w, r, false)
 		if e == nil {
 			return

@@ -1,5 +1,8 @@
 # Turn Stripe webhooks into Inngest events named stripe/<type>. Give
 # inngest_webhook.stripe.url to Stripe as the endpoint URL.
+# For updates/deletes, supply this environment's dashboard signing key through
+# the provider signing_key or INNGEST_SIGNING_KEY. Use signing_key on this
+# resource (from a sensitive variable) to override it for another environment.
 resource "inngest_webhook" "stripe" {
   environment = "production"
   name        = "Stripe"

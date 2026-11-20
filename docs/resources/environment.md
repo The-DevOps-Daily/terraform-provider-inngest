@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   An Inngest environment, such as a shared staging or qa environment. Each environment has its own apps, functions, events, event keys and signing keys.
   The Inngest API can create an environment and archive or unarchive it, but it cannot rename or delete one. So:
-  Changing name replaces the environment: Terraform creates a new one and archives the old one.Destroying the resource archives the environment. Archiving stops its functions from triggering and keeps its data. A production environment is never archived: destroying it only removes it from the Terraform state.
+  Changing name replaces the environment: Terraform creates a new one and archives the old one.Destroying the resource archives the environment. Archiving stops its functions from triggering and keeps its data. Production is protected only when type is PRODUCTION, or when type is absent and the name is production (case-insensitive). Destroying it only removes it from Terraform state. Other environments with missing type are archived.
   Branch environments are created by Inngest on demand, the first time an app syncs or an event is sent with that branch name. Import one to archive or unarchive it from Terraform, or read it with the inngest_environment data source.
   Only active environments count toward the plan's environment limit (3 active environments and 2 active branch environments on the free plan).
 ---
@@ -17,7 +17,7 @@ An Inngest environment, such as a shared `staging` or `qa` environment. Each env
 The Inngest API can create an environment and archive or unarchive it, but it cannot rename or delete one. So:
 
 - Changing `name` replaces the environment: Terraform creates a new one and archives the old one.
-- Destroying the resource archives the environment. Archiving stops its functions from triggering and keeps its data. A production environment is never archived: destroying it only removes it from the Terraform state.
+- Destroying the resource archives the environment. Archiving stops its functions from triggering and keeps its data. Production is protected only when `type` is `PRODUCTION`, or when `type` is absent and the name is `production` (case-insensitive). Destroying it only removes it from Terraform state. Other environments with missing `type` are archived.
 
 Branch environments are created by Inngest on demand, the first time an app syncs or an event is sent with that branch name. Import one to archive or unarchive it from Terraform, or read it with the `inngest_environment` data source.
 
@@ -52,8 +52,8 @@ resource "inngest_environment" "legacy" {
 ### Read-Only
 
 - `created_at` (String) Creation time (RFC 3339).
-- `id` (String) Environment ID (a UUID).
-- `type` (String) Environment type: `PRODUCTION`, `TEST` or `BRANCH`.
+- `id` (String) Environment ID.
+- `type` (String) Environment type: `PRODUCTION`, `TEST` or `BRANCH`, or null when omitted by the API (including custom environments and production).
 
 ## Import
 

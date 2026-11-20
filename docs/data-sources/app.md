@@ -36,7 +36,7 @@ check "billing_app_synced" {
 
 ### Optional
 
-- `environment` (String) Environment of the app, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`; when neither is set, the API uses the production environment.
+- `environment` (String) Environment of the app, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`.
 
 ### Read-Only
 

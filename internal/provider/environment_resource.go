@@ -52,13 +52,13 @@ func (r *environmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"The Inngest API can create an environment and archive or unarchive it, but it cannot rename or delete one. So:\n\n" +
 			"- Changing `name` replaces the environment: Terraform creates a new one and archives the old one.\n" +
 			"- Destroying the resource archives the environment. Archiving stops its functions from triggering and keeps its data. " +
-			"A production environment is never archived: destroying it only removes it from the Terraform state.\n\n" +
+			"Production is protected only when `type` is `PRODUCTION`, or when `type` is absent and the name is `production` (case-insensitive). Destroying it only removes it from Terraform state. Other environments with missing `type` are archived.\n\n" +
 			"Branch environments are created by Inngest on demand, the first time an app syncs or an event is sent with that branch name. " +
 			"Import one to archive or unarchive it from Terraform, or read it with the `inngest_environment` data source.\n\n" +
 			"Only active environments count toward the plan's environment limit (3 active environments and 2 active branch environments on the free plan).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				MarkdownDescription: "Environment ID (a UUID).",
+				MarkdownDescription: "Environment ID.",
 				Computed:            true,
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
@@ -69,7 +69,7 @@ func (r *environmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"type": schema.StringAttribute{
-				MarkdownDescription: "Environment type: `PRODUCTION`, `TEST` or `BRANCH`.",
+				MarkdownDescription: "Environment type: `PRODUCTION`, `TEST` or `BRANCH`, or null when omitted by the API (including custom environments and production).",
 				Computed:            true,
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
@@ -196,7 +196,7 @@ func (r *environmentResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	if state.Type.ValueString() == client.EnvTypeProduction {
+	if (&client.Env{Type: state.Type.ValueString(), Name: state.Name.ValueString()}).IsProduction() {
 		resp.Diagnostics.AddWarning("Production environment not archived",
 			fmt.Sprintf("Environment %q is the production environment, so Terraform only removed it from the state.", state.Name.ValueString()))
 		return
@@ -251,11 +251,7 @@ func mapEnvironment(env *client.Env, m *environmentResourceModel) {
 	if env.Name != "" {
 		m.Name = types.StringValue(env.Name)
 	}
-	if env.Type != "" {
-		m.Type = types.StringValue(env.Type)
-	} else if m.Type.IsUnknown() {
-		m.Type = types.StringNull()
-	}
+	m.Type = optionalString(env.Type)
 	m.Archived = types.BoolValue(env.IsArchived)
 	if env.CreatedAt != "" {
 		m.CreatedAt = types.StringValue(env.CreatedAt)

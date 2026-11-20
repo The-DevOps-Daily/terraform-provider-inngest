@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Environment types, from the v2EnvType enum.
@@ -41,20 +42,13 @@ const envPageLimit = 250
 
 // ListEnvs returns every environment of the account (GET /v2/envs).
 func (c *Client) ListEnvs(ctx context.Context) ([]Env, error) {
-	envs, err := listAll[Env](ctx, c, "/v2/envs", "", nil, envPageLimit)
-	for i := range envs {
-		envs[i].setDefaults()
-	}
-	return envs, err
+	return listAll[Env](ctx, c, "/v2/envs", "", nil, envPageLimit)
 }
 
-// setDefaults fills in the type when the API leaves it out. The service
-// speaks protobuf JSON, which omits an enum's zero value, and the zero value
-// of v2EnvType is PRODUCTION (the spec's default).
-func (e *Env) setDefaults() {
-	if e.Type == "" {
-		e.Type = EnvTypeProduction
-	}
+// IsProduction protects only an explicit production type or the account's
+// production environment. Custom environments also omit type in real responses.
+func (e *Env) IsProduction() bool {
+	return e.Type == EnvTypeProduction || (e.Type == "" && strings.EqualFold(e.Name, "production"))
 }
 
 // GetEnv finds one environment by ID. The API has no read-one endpoint, so
@@ -78,7 +72,6 @@ func (c *Client) CreateEnv(ctx context.Context, req CreateEnvRequest) (*Env, err
 	if err := c.do(ctx, request{method: http.MethodPost, path: "/v2/envs", body: req}, &out); err != nil {
 		return nil, err
 	}
-	out.Data.setDefaults()
 	return &out.Data, nil
 }
 

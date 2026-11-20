@@ -28,12 +28,15 @@ func getProviderData(data any) (*providerData, diag.Diagnostics) {
 }
 
 // headerEnv picks the X-Inngest-Env value for a data source: its own
-// environment, else the provider's, else "" (the API then uses production).
+// environment, else the provider's, else production.
 func (pd *providerData) headerEnv(attr types.String) string {
 	if !attr.IsNull() && !attr.IsUnknown() && attr.ValueString() != "" {
 		return attr.ValueString()
 	}
-	return pd.environment
+	if pd.environment != "" {
+		return pd.environment
+	}
+	return defaultEnvironment
 }
 
 // resourceEnv picks the environment of a resource that needs one: its own,

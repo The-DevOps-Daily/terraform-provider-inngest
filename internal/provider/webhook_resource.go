@@ -40,6 +40,7 @@ type webhookResource struct {
 }
 
 type webhookResourceModel struct {
+	SigningKey  types.String `tfsdk:"signing_key"`
 	ID          types.String `tfsdk:"id"`
 	Environment types.String `tfsdk:"environment"`
 	Name        types.String `tfsdk:"name"`
@@ -70,7 +71,7 @@ func (r *webhookResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 		MarkdownDescription: "An Inngest webhook: a URL that accepts HTTP requests from a third party (Stripe, GitHub, Clerk, ...) and turns each one into an Inngest event with a JavaScript `transform` function.\n\n" +
 			"Give the generated `url` to the provider that sends the webhooks. The URL is a secret: anyone who has it can send events into the environment.\n\n" +
 			"The v2 API creates and lists webhooks. Renaming a webhook, changing its transform and deleting it go through the v1 API, which takes the environment's signing key, " +
-			"so the provider lists the environment's signing keys with the API key first. The API key therefore needs permission to read signing keys. " +
+			"supplied through `signing_key` on the webhook or provider, or `INNGEST_SIGNING_KEY`. API keys cannot read signing keys; only credentials with key access can use the lookup fallback. " +
 			"`response` and `event_filter` cannot be changed in place, so changing them replaces the webhook, and the replacement has a new `url`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -82,6 +83,12 @@ func (r *webhookResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				MarkdownDescription: "Environment of the webhook, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`. Changing it replaces the webhook.",
 				Optional:            true,
 				Computed:            true,
+				Validators:          []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"signing_key": schema.StringAttribute{
+				MarkdownDescription: "This environment's signing key from the Inngest dashboard, used for updates and deletes. Overrides the provider's `signing_key` and `INNGEST_SIGNING_KEY`. Stored as sensitive Terraform state; it cannot be recovered on import.",
+				Optional:            true,
+				Sensitive:           true,
 				Validators:          []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"name": schema.StringAttribute{
@@ -260,7 +267,7 @@ func (r *webhookResource) Update(ctx context.Context, req resource.UpdateRequest
 		err := r.data.client.UpdateWebhook(ctx, env, id, client.UpdateWebhookRequest{
 			Name:      plan.Name.ValueString(),
 			Transform: plan.Transform.ValueString(),
-		})
+		}, plan.SigningKey.ValueString())
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Inngest webhook", err.Error())
 			return
@@ -283,7 +290,7 @@ func (r *webhookResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 	env := r.data.resourceEnv(state.Environment)
-	if err := r.data.client.DeleteWebhook(ctx, env, state.ID.ValueString()); err != nil {
+	if err := r.data.client.DeleteWebhook(ctx, env, state.ID.ValueString(), state.SigningKey.ValueString()); err != nil {
 		if client.IsNotFound(err) {
 			return
 		}

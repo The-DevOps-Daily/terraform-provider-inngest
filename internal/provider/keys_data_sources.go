@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -71,10 +72,10 @@ func (d *keysDataSource) Metadata(_ context.Context, req datasource.MetadataRequ
 
 func (d *keysDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: d.description,
+		MarkdownDescription: d.description + "\n\nAPI keys cannot read keys: these endpoints return 403 even for an API key with access to all resources. This data source requires a credential with key access. The dashboard has no API-key permission for keys.",
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.StringAttribute{
-				MarkdownDescription: "Environment to list " + d.what + " for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`; when neither is set, the API lists the production environment's keys.",
+				MarkdownDescription: "Environment to list " + d.what + " for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`.",
 				Optional:            true,
 			},
 			"name": schema.StringAttribute{
@@ -114,7 +115,11 @@ func (d *keysDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 	keys, err := d.list(ctx, d.data.client, d.data.headerEnv(cfg.Environment))
 	if err != nil {
-		resp.Diagnostics.AddError("Error listing Inngest "+d.what, err.Error())
+		detail := err.Error()
+		if client.IsStatus(err, http.StatusForbidden) {
+			detail = "Inngest API keys cannot read keys. This data source requires a credential with key access; the Inngest dashboard has no API-key permission for keys."
+		}
+		resp.Diagnostics.AddError("Error listing Inngest "+d.what, detail)
 		return
 	}
 	cfg.Keys = []keyModel{}

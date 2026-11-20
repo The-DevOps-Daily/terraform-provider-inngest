@@ -6,8 +6,8 @@
 //
 // The v2 API takes an API key as a Bearer token and selects the environment
 // with the X-Inngest-Env header. The v1 API takes the environment's signing
-// key instead, so the client looks that key up through the v2 API when it
-// needs it.
+// key instead, supplied explicitly or looked up through v2 when credentials
+// have key access.
 package client
 
 import (
@@ -41,6 +41,8 @@ const maxErrorBody = 1024
 
 // Client talks to the Inngest REST API.
 type Client struct {
+	// SigningKey is the provider default for v1 webhook calls. A per-call key overrides it.
+	SigningKey string
 	APIKey     string
 	BaseURL    string
 	HTTPClient *http.Client
@@ -61,9 +63,8 @@ type Client struct {
 	Sleep func(ctx context.Context, d time.Duration) error
 
 	mu sync.Mutex
-	// signingKeys caches, per environment, the signing key that the v1 API
-	// last accepted.
-	signingKeys map[string]string
+	// signingKeys caches the last accepted token per environment and configured key.
+	signingKeys map[signingKeyCacheID]string
 }
 
 // New builds a Client. An empty baseURL falls back to Inngest Cloud.
@@ -80,7 +81,7 @@ func New(apiKey, baseURL, userAgent string) *Client {
 		MinBackoff:  time.Second,
 		MaxBackoff:  30 * time.Second,
 		Sleep:       sleepCtx,
-		signingKeys: map[string]string{},
+		signingKeys: map[signingKeyCacheID]string{},
 	}
 }
 
@@ -153,7 +154,8 @@ type request struct {
 	env    string
 	body   any
 	// token overrides the API key, for v1 calls made with a signing key.
-	token string
+	token   string
+	secrets []string
 }
 
 // envelope is the v2 response wrapper.
@@ -173,6 +175,16 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 	if c.KeyError != nil {
 		return c.KeyError
 	}
+	// Account-wide environment endpoints do not need an environment header.
+	// Every endpoint scoped to one environment does, including production.
+	if r.env == "" && (strings.HasPrefix(r.path, "/v2/keys/") || r.path == "/v2/apps" || strings.HasPrefix(r.path, "/v2/apps/") || strings.HasPrefix(r.path, "/v2/env/") || strings.HasPrefix(r.path, "/v1/webhooks/")) {
+		r.env = "production"
+	}
+	token := c.APIKey
+	if r.token != "" {
+		token = r.token
+	}
+	secrets := append([]string{c.APIKey, c.SigningKey, HashSigningKey(c.SigningKey), token}, r.secrets...)
 	var payload []byte
 	if r.body != nil {
 		b, err := json.Marshal(r.body)
@@ -185,11 +197,6 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 	if len(r.query) > 0 {
 		target += "?" + r.query.Encode()
 	}
-	token := c.APIKey
-	if r.token != "" {
-		token = r.token
-	}
-
 	idempotent := r.method != http.MethodPost
 	sleep := c.Sleep
 	if sleep == nil {
@@ -202,7 +209,7 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 		}
 		req, err := http.NewRequestWithContext(ctx, r.method, target, reqBody)
 		if err != nil {
-			return fmt.Errorf("building request: %w", err)
+			return fmt.Errorf("building request: %s", redact(err.Error(), secrets...))
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Accept", "application/json")
@@ -229,12 +236,12 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 				}
 				continue
 			}
-			return fmt.Errorf("calling Inngest API %s %s: %w", r.method, r.path, err)
+			return fmt.Errorf("calling Inngest API %s %s: %s", r.method, r.path, redact(err.Error(), secrets...))
 		}
 		data, readErr := io.ReadAll(io.LimitReader(res.Body, 10<<20))
 		_ = res.Body.Close()
 		if readErr != nil {
-			return fmt.Errorf("reading Inngest API response for %s %s: %w", r.method, r.path, readErr)
+			return fmt.Errorf("reading Inngest API response for %s %s: %s", r.method, r.path, redact(readErr.Error(), secrets...))
 		}
 
 		if retryable(res.StatusCode, idempotent) && attempt < c.MaxRetries {
@@ -246,11 +253,11 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 			continue
 		}
 		if res.StatusCode >= http.StatusBadRequest {
-			return parseError(r.method, r.path, res.StatusCode, data, c.APIKey, token)
+			return parseError(r.method, r.path, res.StatusCode, data, secrets...)
 		}
 		if out != nil && len(bytes.TrimSpace(data)) > 0 {
 			if err := json.Unmarshal(data, out); err != nil {
-				return fmt.Errorf("decoding Inngest API response for %s %s: %w", r.method, r.path, err)
+				return fmt.Errorf("decoding Inngest API response for %s %s: %s", r.method, r.path, redact(err.Error(), secrets...))
 			}
 		}
 		return nil
@@ -342,6 +349,7 @@ func parseError(method, path string, status int, data []byte, secrets ...string)
 			apiErr.Message = string(trimmed)
 		}
 	}
+	apiErr.Code = redact(apiErr.Code, secrets...)
 	apiErr.Message = redact(apiErr.Message, secrets...)
 	if len(apiErr.Message) > maxErrorBody {
 		apiErr.Message = apiErr.Message[:maxErrorBody] + "..."
@@ -358,7 +366,7 @@ var secretPatterns = regexp.MustCompile(`sk-inn-[A-Za-z0-9_-]+|signkey-[A-Za-z0-
 // credential, so a diagnostic never shows one.
 func redact(msg string, secrets ...string) string {
 	for _, s := range secrets {
-		if len(s) >= 8 {
+		if s != "" {
 			msg = strings.ReplaceAll(msg, s, "[redacted]")
 		}
 	}

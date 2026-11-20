@@ -5,6 +5,7 @@ subcategory: ""
 description: |-
   Lists the event keys of an Inngest environment. An app sends events with an event key (INNGEST_EVENT_KEY). All branch environments share the same event keys. The key values are sensitive.
   The Inngest API cannot create or rotate event keys; do that in the dashboard.
+  API keys cannot read keys: these endpoints return 403 even for an API key with access to all resources. This data source requires a credential with key access. The dashboard has no API-key permission for keys.
 ---
 
 # inngest_event_keys (Data Source)
@@ -13,9 +14,14 @@ Lists the event keys of an Inngest environment. An app sends events with an even
 
 The Inngest API cannot create or rotate event keys; do that in the dashboard.
 
+API keys cannot read keys: these endpoints return 403 even for an API key with access to all resources. This data source requires a credential with key access. The dashboard has no API-key permission for keys.
+
 ## Example Usage
 
 ```terraform
+# Requires a credential with key access. Ordinary Inngest API keys return
+# 403, even with access to all resources; there is no keys permission in the
+# API-key dashboard. Obtain keys from the environment dashboard instead.
 data "inngest_event_keys" "staging" {
   environment = "staging"
 }
@@ -32,7 +38,7 @@ output "staging_event_key" {
 
 ### Optional
 
-- `environment` (String) Environment to list event keys for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`; when neither is set, the API lists the production environment's keys.
+- `environment` (String) Environment to list event keys for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`.
 - `name` (String) Only return keys with exactly this name.
 
 ### Read-Only

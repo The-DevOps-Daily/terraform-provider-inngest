@@ -26,7 +26,7 @@ func TestMockDataSources(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: fakeProviderConfig(url) + `
+				Config: fakeKeyAccessProviderConfig(url) + `
 data "inngest_environments" "active" {}
 data "inngest_environments" "branches" {
   type             = "BRANCH"
@@ -56,17 +56,17 @@ data "inngest_webhooks" "staging" { environment = "staging" }
 					resource.TestCheckResourceAttr("data.inngest_environments.branches", "environments.#", "2"),
 					resource.TestCheckResourceAttr("data.inngest_environments.branches", "environments.1.archived", "true"),
 					resource.TestCheckResourceAttr("data.inngest_environment.staging", "type", "TEST"),
-					resource.TestCheckResourceAttr("data.inngest_environments.active", "environments.0.type", "PRODUCTION"),
+					resource.TestCheckNoResourceAttr("data.inngest_environments.active", "environments.0.type"),
 					resource.TestCheckResourceAttr("data.inngest_environment.staging", "archived", "false"),
 					resource.TestCheckResourceAttrPair("data.inngest_environment.by_id", "name", "data.inngest_environment.staging", "name"),
 					resource.TestCheckResourceAttr("data.inngest_event_keys.staging", "keys.#", "2"),
 					resource.TestCheckResourceAttr("data.inngest_event_keys.staging", "keys.0.environment", "staging"),
 					resource.TestCheckResourceAttr("data.inngest_event_keys.named", "keys.#", "1"),
 					resource.TestCheckResourceAttr("data.inngest_event_keys.named", "keys.0.key", "evtkey-second"),
-					// No environment: the API's default, production.
+					// No environment: explicitly send production.
 					resource.TestCheckResourceAttr("data.inngest_signing_keys.prod", "keys.#", "1"),
 					resource.TestCheckResourceAttr("data.inngest_signing_keys.prod", "keys.0.environment", "production"),
-					resource.TestMatchResourceAttr("data.inngest_signing_keys.prod", "keys.0.key", regexp.MustCompile(`^signkey-production-`)),
+					resource.TestMatchResourceAttr("data.inngest_signing_keys.prod", "keys.0.key", regexp.MustCompile(`^signkey-test-`)),
 					resource.TestCheckResourceAttr("data.inngest_apps.staging", "apps.#", "1"),
 					resource.TestCheckResourceAttr("data.inngest_apps.staging", "apps.0.id", "billing"),
 					resource.TestCheckResourceAttr("data.inngest_apps.archived", "apps.0.id", "legacy"),

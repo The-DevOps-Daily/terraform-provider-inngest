@@ -66,7 +66,7 @@ func TestRequestHeaders(t *testing.T) {
 	}
 }
 
-func TestNoEnvHeaderWhenEmpty(t *testing.T) {
+func TestAccountEndpointsDoNotNeedEnvHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := r.Header[http.CanonicalHeaderKey(EnvHeader)]; ok {
 			t.Errorf("unexpected %s header", EnvHeader)
@@ -75,7 +75,7 @@ func TestNoEnvHeaderWhenEmpty(t *testing.T) {
 	}))
 	defer srv.Close()
 	c, _ := newTestClient(t, srv)
-	if _, err := c.ListEventKeys(context.Background(), ""); err != nil {
+	if _, err := c.ListEnvs(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -393,7 +393,7 @@ func TestListNotFoundIsNotMissing(t *testing.T) {
 	}
 }
 
-// protobuf JSON leaves out enum zero values: PRODUCTION and UNSPECIFIED.
+// Environment type omission must be preserved; app methods default to UNSPECIFIED.
 func TestEnumDefaults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -406,7 +406,7 @@ func TestEnumDefaults(t *testing.T) {
 	defer srv.Close()
 	c, _ := newTestClient(t, srv)
 	envs, err := c.ListEnvs(context.Background())
-	if err != nil || envs[0].Type != EnvTypeProduction || envs[1].Type != EnvTypeTest {
+	if err != nil || envs[0].Type != "" || envs[1].Type != EnvTypeTest {
 		t.Fatalf("envs=%+v err=%v", envs, err)
 	}
 	app, err := c.GetApp(context.Background(), "", "a")

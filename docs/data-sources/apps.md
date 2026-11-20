@@ -28,7 +28,7 @@ output "app_function_counts" {
 ### Optional
 
 - `archived` (Boolean) List archived apps instead of active ones. Defaults to `false`.
-- `environment` (String) Environment to list apps for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`; when neither is set, the API uses the production environment.
+- `environment` (String) Environment to list apps for, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`.
 
 ### Read-Only
 

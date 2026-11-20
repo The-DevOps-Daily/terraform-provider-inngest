@@ -90,28 +90,39 @@ func (c *Client) GetWebhook(ctx context.Context, env, id string) (*Webhook, erro
 
 // UpdateWebhook changes a webhook's name and transform
 // (PUT /v1/webhooks/{id}). The v2 API has no update endpoint yet.
-func (c *Client) UpdateWebhook(ctx context.Context, env, id string, req UpdateWebhookRequest) error {
-	return c.doV1(ctx, env, request{method: http.MethodPut, path: "/v1/webhooks/" + url.PathEscape(id), body: req})
+func (c *Client) UpdateWebhook(ctx context.Context, env, id string, req UpdateWebhookRequest, signingKey ...string) error {
+	return c.doV1(ctx, env, request{method: http.MethodPut, path: "/v1/webhooks/" + url.PathEscape(id), body: req}, signingKey...)
 }
 
 // DeleteWebhook deletes a webhook (DELETE /v1/webhooks/{id}). The v2 API has
 // no delete endpoint yet.
-func (c *Client) DeleteWebhook(ctx context.Context, env, id string) error {
-	return c.doV1(ctx, env, request{method: http.MethodDelete, path: "/v1/webhooks/" + url.PathEscape(id)})
+func (c *Client) DeleteWebhook(ctx context.Context, env, id string, signingKey ...string) error {
+	return c.doV1(ctx, env, request{method: http.MethodDelete, path: "/v1/webhooks/" + url.PathEscape(id)}, signingKey...)
 }
 
-// doV1 calls a v1 endpoint. The v1 API takes the environment's signing key,
-// not an API key, so the signing keys are listed through the v2 API first and
-// tried in turn (each as given and in the hashed form the SDKs send). The key
-// that works is remembered for the environment.
-func (c *Client) doV1(ctx context.Context, env string, r request) error {
+// Cache by both environment and configured key so resource overrides and
+// rotations never reuse a token selected for another configuration.
+type signingKeyCacheID struct{ environment, configuredKey string }
+
+// doV1 prefers the resource key, then the provider key. Only credentials with
+// key access can use the v2 lookup fallback. Try raw and SDK-hashed forms.
+func (c *Client) doV1(ctx context.Context, env string, r request, override ...string) error {
 	if c.KeyError != nil {
 		return c.KeyError
 	}
+	if env == "" {
+		env = "production"
+	}
 	r.env = env
+	key := c.SigningKey
+	if len(override) > 0 && override[0] != "" {
+		key = override[0]
+	}
+	r.secrets = append(r.secrets, key, HashSigningKey(key))
+	cacheID := signingKeyCacheID{env, key}
 
 	c.mu.Lock()
-	cached := c.signingKeys[env]
+	cached := c.signingKeys[cacheID]
 	c.mu.Unlock()
 	if cached != "" {
 		r.token = cached
@@ -120,25 +131,32 @@ func (c *Client) doV1(ctx context.Context, env string, r request) error {
 			return err
 		}
 		c.mu.Lock()
-		delete(c.signingKeys, env)
+		delete(c.signingKeys, cacheID)
 		c.mu.Unlock()
 	}
 
-	keys, err := c.ListSigningKeys(ctx, env)
-	if err != nil {
-		// Not wrapped with %w: a 404 here is about the key list, and must not
-		// read as "the webhook is already gone".
-		return fmt.Errorf("the v1 webhook API needs the environment's signing key, and listing signing keys for environment %q failed: %v", env, err)
+	keys := []Key{{Key: key}}
+	if key == "" {
+		var err error
+		keys, err = c.ListSigningKeys(ctx, env)
+		if IsStatus(err, http.StatusForbidden) {
+			return errors.New("Inngest API keys cannot read signing keys. Set signing_key on the provider or the webhook (or INNGEST_SIGNING_KEY) to the environment's signing key from the Inngest dashboard.")
+		}
+		if err != nil {
+			// A 404 here is about the key list, never a missing webhook.
+			return fmt.Errorf("the v1 webhook API needs the environment's signing key, and listing signing keys for environment %q failed: %v", env, err)
+		}
 	}
-	type candidate struct{ token, keyID, form string }
+	type candidate struct{ token, form string }
 	var candidates []candidate
 	for _, k := range keys {
 		if k.Key == "" {
 			continue
 		}
-		candidates = append(candidates, candidate{k.Key, k.ID, "as given"})
+		r.secrets = append(r.secrets, k.Key, HashSigningKey(k.Key))
+		candidates = append(candidates, candidate{k.Key, "as given"})
 		if h := HashSigningKey(k.Key); h != "" && h != k.Key {
-			candidates = append(candidates, candidate{h, k.ID, "hashed"})
+			candidates = append(candidates, candidate{h, "hashed"})
 		}
 	}
 	if len(candidates) == 0 {
@@ -150,14 +168,14 @@ func (c *Client) doV1(ctx context.Context, env string, r request) error {
 		r.token = cand.token
 		err := c.do(ctx, r, nil)
 		if IsStatus(err, http.StatusUnauthorized) {
-			tflog.Debug(ctx, "Inngest v1 API refused a signing key", map[string]any{"environment": env, "signing_key_id": cand.keyID, "form": cand.form})
+			tflog.Debug(ctx, "Inngest v1 API refused a signing key", map[string]any{"environment": env, "form": cand.form})
 			lastErr = err
 			continue
 		}
 		// Any other answer means the key was accepted.
-		tflog.Debug(ctx, "Inngest v1 API accepted a signing key", map[string]any{"environment": env, "signing_key_id": cand.keyID, "form": cand.form})
+		tflog.Debug(ctx, "Inngest v1 API accepted a signing key", map[string]any{"environment": env, "form": cand.form})
 		c.mu.Lock()
-		c.signingKeys[env] = cand.token
+		c.signingKeys[cacheID] = cand.token
 		c.mu.Unlock()
 		return err
 	}

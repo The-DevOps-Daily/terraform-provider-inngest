@@ -36,7 +36,7 @@ func TestMockWebhook(t *testing.T) {
 	api.pageSize = 1
 	// Another webhook in the environment, so lookups have to page.
 	api.webhooks = append(api.webhooks, &fakeWebhook{ID: "other", Env: "production", Name: "Other", Transform: "function transform(e){return {name:'x',data:e}}", URL: "https://inn.gs/e/other"})
-	p := fakeProviderConfig(url)
+	p := fakeKeyAccessProviderConfig(url)
 	var firstURL, firstID string
 
 	resource.UnitTest(t, resource.TestCase{
@@ -201,7 +201,7 @@ func TestMockWebhookEnvironments(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: fakeProviderConfigEnv(url, "staging") + webhookConfig("Stripe", stripeTransform, ""),
+				Config: fakeKeyAccessProviderConfigEnv(url, "staging") + webhookConfig("Stripe", stripeTransform, ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("inngest_webhook.stripe", "environment", "staging"),
 					func(*terraform.State) error {
@@ -214,14 +214,14 @@ func TestMockWebhookEnvironments(t *testing.T) {
 			},
 			{
 				// An in-place update in staging uses staging's signing key.
-				Config: fakeProviderConfigEnv(url, "staging") + webhookConfig("Stripe staging", stripeTransform, ""),
+				Config: fakeKeyAccessProviderConfigEnv(url, "staging") + webhookConfig("Stripe staging", stripeTransform, ""),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction("inngest_webhook.stripe", plancheck.ResourceActionUpdate)},
 				},
 			},
 			{
 				// The resource's own environment wins over the provider's.
-				Config: fakeProviderConfigEnv(url, "staging") + webhookConfig("Stripe", stripeTransform, `  environment = "feature/login"`),
+				Config: fakeKeyAccessProviderConfigEnv(url, "staging") + webhookConfig("Stripe", stripeTransform, `  environment = "feature/login"`),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction("inngest_webhook.stripe", plancheck.ResourceActionDestroyBeforeCreate)},
 				},
@@ -246,13 +246,13 @@ func TestMockWebhookEnvironments(t *testing.T) {
 			},
 			{
 				// A change of the provider default replaces webhooks that use it.
-				Config: fakeProviderConfigEnv(url, "staging") + webhookConfig("Stripe", stripeTransform, ""),
+				Config: fakeKeyAccessProviderConfigEnv(url, "staging") + webhookConfig("Stripe", stripeTransform, ""),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction("inngest_webhook.stripe", plancheck.ResourceActionDestroyBeforeCreate)},
 				},
 			},
 			{
-				Config: fakeProviderConfigEnv(url, "production") + webhookConfig("Stripe", stripeTransform, ""),
+				Config: fakeKeyAccessProviderConfigEnv(url, "production") + webhookConfig("Stripe", stripeTransform, ""),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction("inngest_webhook.stripe", plancheck.ResourceActionDestroyBeforeCreate)},
 				},
@@ -265,7 +265,7 @@ func TestMockWebhookEnvironments(t *testing.T) {
 func TestMockWebhookErrors(t *testing.T) {
 	skipWithoutTerraform(t)
 	_, url := newFakeAPI(t)
-	p := fakeProviderConfig(url)
+	p := fakeKeyAccessProviderConfig(url)
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -305,7 +305,7 @@ func TestMockWebhookRateLimited(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: fakeProviderConfig(url) + webhookConfig("Stripe", stripeTransform, ""),
+				Config: fakeKeyAccessProviderConfig(url) + webhookConfig("Stripe", stripeTransform, ""),
 				Check: func(*terraform.State) error {
 					if len(api.webhooks) != 1 {
 						return fmt.Errorf("%d webhooks after a retried create", len(api.webhooks))
@@ -325,7 +325,7 @@ func TestMockWebhookUnknownEnvironment(t *testing.T) {
 	api, url := newFakeAPI(t)
 	api.addEnv("staging", "TEST")
 	cfg := func(env string) string {
-		return fakeProviderConfig(url) + fmt.Sprintf(`resource "terraform_data" "env" { input = %q }
+		return fakeKeyAccessProviderConfig(url) + fmt.Sprintf(`resource "terraform_data" "env" { input = %q }
 `, env) + webhookConfig("Stripe", stripeTransform, `  environment = terraform_data.env.output`)
 	}
 	resource.UnitTest(t, resource.TestCase{
@@ -359,7 +359,7 @@ func TestMockWebhookUnknownEnvironment(t *testing.T) {
 func TestMockAccountLevel404KeepsState(t *testing.T) {
 	skipWithoutTerraform(t)
 	api, url := newFakeAPI(t)
-	p := fakeProviderConfig(url)
+	p := fakeKeyAccessProviderConfig(url)
 	both := p + `resource "inngest_environment" "staging" { name = "staging" }
 ` + webhookConfig("Stripe", stripeTransform, "")
 	resource.UnitTest(t, resource.TestCase{

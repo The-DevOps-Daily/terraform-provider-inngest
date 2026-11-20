@@ -29,7 +29,7 @@ output "branch_environments" {
 ### Optional
 
 - `include_archived` (Boolean) Also list archived environments. Defaults to `false`.
-- `type` (String) Only list environments of this type: `PRODUCTION`, `TEST` or `BRANCH`.
+- `type` (String) Only list environments explicitly reporting this type: `PRODUCTION`, `TEST` or `BRANCH`. Environments whose type is omitted are excluded.
 
 ### Read-Only
 
@@ -44,4 +44,4 @@ Read-Only:
 - `created_at` (String) Creation time (RFC 3339).
 - `id` (String) Environment ID.
 - `name` (String) Environment name.
-- `type` (String) Environment type.
+- `type` (String) Environment type, or null when omitted by the API.

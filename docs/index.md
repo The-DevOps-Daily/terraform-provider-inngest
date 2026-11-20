@@ -5,6 +5,7 @@ description: |-
   The Inngest provider manages Inngest https://www.inngest.com environments and webhooks through the Inngest REST API https://api-docs.inngest.com, and reads environments, apps, event keys and signing keys.
   This is a community provider. It is not affiliated with or endorsed by Inngest, Inc.
   Authenticate with an Inngest API key (create one on the API keys page https://app.inngest.com/settings/api-keys). Most calls act on one environment, which the API selects with the X-Inngest-Env header. Set environment here for a default, and override it on each resource or data source.
+  API keys cannot read event or signing keys. Key data sources require a credential with key access. For webhook updates and deletes, supply the environment signing key from the dashboard through signing_key or INNGEST_SIGNING_KEY.
 ---
 
 # inngest Provider
@@ -14,6 +15,8 @@ The Inngest provider manages [Inngest](https://www.inngest.com) environments and
 This is a community provider. It is not affiliated with or endorsed by Inngest, Inc.
 
 Authenticate with an Inngest API key (create one on the [API keys page](https://app.inngest.com/settings/api-keys)). Most calls act on one environment, which the API selects with the `X-Inngest-Env` header. Set `environment` here for a default, and override it on each resource or data source.
+
+API keys cannot read event or signing keys. Key data sources require a credential with key access. For webhook updates and deletes, supply the environment signing key from the dashboard through `signing_key` or `INNGEST_SIGNING_KEY`.
 
 ## Example Usage
 
@@ -28,6 +31,8 @@ terraform {
 
 # Reads INNGEST_API_KEY from the environment. Create an API key at
 # https://app.inngest.com/settings/api-keys.
+# Set INNGEST_SIGNING_KEY to this environment's dashboard signing key for
+# webhook updates/deletes, or set signing_key here from a sensitive variable.
 provider "inngest" {
   # Default environment for every resource and data source, sent as the
   # X-Inngest-Env header. Each one can override it.
@@ -42,4 +47,5 @@ provider "inngest" {
 
 - `api_key` (String, Sensitive) Inngest API key (it starts with `sk-inn-api-`). Can also be set with the `INNGEST_API_KEY` environment variable. It is checked when a resource or data source calls the API, so a configuration that never calls the API plans without one.
 - `base_url` (String) Base URL of the Inngest REST API, without the `/v1` or `/v2` suffix. Defaults to `https://api.inngest.com`. Can also be set with the `INNGEST_API_BASE_URL` environment variable.
-- `environment` (String) Default environment for resources and data sources that do not set their own, sent as the `X-Inngest-Env` header. Use the environment name, for example `production`, a custom environment such as `staging`, or a branch name such as `feature/my-branch`. Can also be set with the `INNGEST_ENV` environment variable (the same variable the Inngest SDKs read). When unset, webhooks use `production` and data sources let the API pick its default, which is the production environment.
+- `environment` (String) Default environment for resources and data sources that do not set their own, sent as the `X-Inngest-Env` header. Use the environment name, for example `production`, a custom environment such as `staging`, or a branch name such as `feature/my-branch`. Can also be set with the `INNGEST_ENV` environment variable (the same variable the Inngest SDKs read). When unset, all environment-scoped calls send `production`.
+- `signing_key` (String, Sensitive) Environment signing key from the Inngest dashboard, used for webhook updates and deletes. Can also be set with `INNGEST_SIGNING_KEY`. A webhook's `signing_key` overrides this value. API keys cannot read signing keys.

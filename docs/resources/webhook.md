@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   An Inngest webhook: a URL that accepts HTTP requests from a third party (Stripe, GitHub, Clerk, ...) and turns each one into an Inngest event with a JavaScript transform function.
   Give the generated url to the provider that sends the webhooks. The URL is a secret: anyone who has it can send events into the environment.
-  The v2 API creates and lists webhooks. Renaming a webhook, changing its transform and deleting it go through the v1 API, which takes the environment's signing key, so the provider lists the environment's signing keys with the API key first. The API key therefore needs permission to read signing keys. response and event_filter cannot be changed in place, so changing them replaces the webhook, and the replacement has a new url.
+  The v2 API creates and lists webhooks. Renaming a webhook, changing its transform and deleting it go through the v1 API, which takes the environment's signing key, supplied through signing_key on the webhook or provider, or INNGEST_SIGNING_KEY. API keys cannot read signing keys; only credentials with key access can use the lookup fallback. response and event_filter cannot be changed in place, so changing them replaces the webhook, and the replacement has a new url.
 ---
 
 # inngest_webhook (Resource)
@@ -14,13 +14,16 @@ An Inngest webhook: a URL that accepts HTTP requests from a third party (Stripe,
 
 Give the generated `url` to the provider that sends the webhooks. The URL is a secret: anyone who has it can send events into the environment.
 
-The v2 API creates and lists webhooks. Renaming a webhook, changing its transform and deleting it go through the v1 API, which takes the environment's signing key, so the provider lists the environment's signing keys with the API key first. The API key therefore needs permission to read signing keys. `response` and `event_filter` cannot be changed in place, so changing them replaces the webhook, and the replacement has a new `url`.
+The v2 API creates and lists webhooks. Renaming a webhook, changing its transform and deleting it go through the v1 API, which takes the environment's signing key, supplied through `signing_key` on the webhook or provider, or `INNGEST_SIGNING_KEY`. API keys cannot read signing keys; only credentials with key access can use the lookup fallback. `response` and `event_filter` cannot be changed in place, so changing them replaces the webhook, and the replacement has a new `url`.
 
 ## Example Usage
 
 ```terraform
 # Turn Stripe webhooks into Inngest events named stripe/<type>. Give
 # inngest_webhook.stripe.url to Stripe as the endpoint URL.
+# For updates/deletes, supply this environment's dashboard signing key through
+# the provider signing_key or INNGEST_SIGNING_KEY. Use signing_key on this
+# resource (from a sensitive variable) to override it for another environment.
 resource "inngest_webhook" "stripe" {
   environment = "production"
   name        = "Stripe"
@@ -61,6 +64,7 @@ output "stripe_webhook_url" {
 - `environment` (String) Environment of the webhook, sent as the `X-Inngest-Env` header. Defaults to the provider's `environment`, then to `production`. Changing it replaces the webhook.
 - `event_filter` (Attributes) Optional filter on the event names the transform produces. Changing it replaces the webhook. (see [below for nested schema](#nestedatt--event_filter))
 - `response` (String) Optional JavaScript function that answers GET requests to the webhook URL, for providers that verify an endpoint with a challenge. Changing it replaces the webhook.
+- `signing_key` (String, Sensitive) This environment's signing key from the Inngest dashboard, used for updates and deletes. Overrides the provider's `signing_key` and `INNGEST_SIGNING_KEY`. Stored as sensitive Terraform state; it cannot be recovered on import.
 
 ### Read-Only
 
