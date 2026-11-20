@@ -355,7 +355,7 @@ func TestWebhookMissingSigningKeyKeepsResource(t *testing.T) {
 	}
 	var updated resource.UpdateResponse
 	r.Update(ctx, resource.UpdateRequest{Plan: plan, State: state}, &updated)
-	if !updated.Diagnostics.HasError() || !strings.Contains(updated.Diagnostics[0].Detail(), "Inngest API keys cannot read signing keys") {
+	if !updated.Diagnostics.HasError() || !strings.Contains(updated.Diagnostics[0].Detail(), "inngest API keys cannot read signing keys") {
 		t.Fatal(updated.Diagnostics)
 	}
 	if len(api.webhooks) != 1 || api.webhooks[0].Name != "original" {
