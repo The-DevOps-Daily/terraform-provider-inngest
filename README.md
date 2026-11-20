@@ -1,5 +1,11 @@
 # Terraform Provider for Inngest
 
+[![Test](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/workflows/test.yml/badge.svg)](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/workflows/test.yml)
+[![Acceptance](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/workflows/acceptance.yml/badge.svg)](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/workflows/acceptance.yml)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](go.mod)
+<!-- Enable after publishing: [![Terraform Registry](https://img.shields.io/badge/Terraform-Registry-844FBA.svg)](https://registry.terraform.io/providers/the-devops-daily/inngest/latest) -->
+
 A Terraform provider for [Inngest](https://www.inngest.com) environments and
 webhooks, built on the
 [Terraform Plugin Framework](https://developer.hashicorp.com/terraform/plugin/framework)
@@ -197,6 +203,16 @@ environment slot. Archived `tf-acc-` environments can be left as they are.
 
 [`GAPS.md`](GAPS.md) lists what the public docs did not settle and what the
 2026-11-20 real-API run confirmed, and what remains open.
+
+## Maintained by DevOps Daily
+
+This project is maintained by [DevOps Daily](https://devops-daily.com).
+Read more in the [DevOps Daily posts](https://devops-daily.com/posts).
+
+<!-- announcement post link -->
+
+See the [contribution guide](CONTRIBUTING.md), [security policy](SECURITY.md)
+and [changelog](CHANGELOG.md).
 
 ## License
 
