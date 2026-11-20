@@ -123,8 +123,9 @@ state and cannot be recovered during import. Use the provider/environment
 variable for import and supply any resource override again afterwards.
 
 `event_filter` and `response` have no update endpoint, so changing them
-replaces the webhook and gives it a new URL. v1 update/delete and rename
-behaviour with a supplied signing key remain unverified against the real API.
+replaces the webhook and gives it a new URL. v1 updates (rename and transform)
+and deletes with a supplied raw signing key passed the real-API acceptance
+tests in the `production` environment on 2026-11-20; see [`GAPS.md`](GAPS.md).
 
 ### Reading keys
 

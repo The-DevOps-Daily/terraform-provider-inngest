@@ -3,7 +3,12 @@
 The first real-API run on **2026-11-20** confirmed the points below. The mock
 API now reflects these observations where they differ from the published
 specs. See [`testdata/README.md`](testdata/README.md) for the original specs.
-No further real-API validation was performed for these fixes.
+
+After the fixes, the real-API acceptance suite (`TestAccEnvironment`,
+`TestAccWebhook`, `TestAccDataSources` and `TestAccKeysDenied`) passed twice on
+2026-11-20 in the `production` environment: once in a local `TF_ACC=1` run
+and once in the
+[Acceptance workflow](https://github.com/The-DevOps-Daily/terraform-provider-inngest/actions/runs/44768827231).
 
 ## Confirmed on 2026-11-20
 
@@ -16,21 +21,21 @@ No further real-API validation was performed for these fixes.
 | `POST /v2/env/webhooks` | Webhook creation works with the environment header. | Keep v2 creation. |
 | `GET /v2/apps` | App listing works. | Keep the app data sources. |
 | `GET /v2/keys/events` and `GET /v2/keys/signing` | API keys receive 403 `access_denied`: `API key does not allow this operation`. The signing endpoint can also return 404 `env_not_found` without the environment header. | Keep key data sources with clear credential-access diagnostics. Always send the header. |
+| `PUT /v1/webhooks/{id}` | Works with the environment's dashboard signing key, sent as given (raw). A rename and transform change updates in place and keeps the URL. | Keep v1 updates with a supplied signing key. |
+| `DELETE /v1/webhooks/{id}` | Works with the raw signing key and removes a v2-created webhook, both for replacements and for `terraform destroy`. | Keep v1 deletes with a supplied signing key. |
+| `X-Inngest-Env` on v1 | Not needed with a signing key in the 2026-11-20 runs; the key selects the environment. | The provider still sends it, because branch environments share one signing key. |
 | Dashboard API-key permissions | There is no keys permission. Resources shown are Accounts, Apps, Environments, Events, Experiments, Feedback, Functions, Images, Insights, Runs, Sandboxes, Sessions and Webhooks. | Do not suggest granting an API key signing-key read permission. Accept a dashboard signing key for v1 webhook calls. |
 
-## Still open: webhook updates, deletes and rename behaviour
+## Still open: webhook details outside the acceptance suite
 
-- **v1 authentication:** verify `PUT /v1/webhooks/{id}` and
-  `DELETE /v1/webhooks/{id}` using an environment signing key from the
-  dashboard. Earlier attempts failed during the signing-key lookup; they did
-  not establish whether these calls work. The provider now accepts provider
-  `signing_key`, `INNGEST_SIGNING_KEY`, and a per-webhook override. It tries the
-  raw key and the SDK-hashed form. Success is covered by mocks only.
-- **Rename behaviour:** confirm that a v1 rename changes the name in place and
-  preserves the URL, transform, event filter and response. Confirm a transform
-  update preserves the other fields, and delete removes a v2-created webhook.
-- **Environment selection for v1:** verify `X-Inngest-Env` on custom and branch
-  environments, especially branches that share a signing key.
+- **Other environments:** the v1 calls were confirmed in `production` only.
+  Custom and branch environments, especially branches that share a signing
+  key, are not yet tested.
+- **Field preservation:** the acceptance test renames a webhook and changes its
+  transform in one update. Whether a rename alone keeps an existing event
+  filter and response is not tested.
+- **Hashed key form:** the raw signing key worked, so the SDK-hashed fallback
+  has not been needed against the real API.
 
 ## Other unresolved details
 

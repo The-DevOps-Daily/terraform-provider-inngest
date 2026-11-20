@@ -20,5 +20,6 @@ Set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` in your application's runtime
 using the keys from the dashboard.
 
 `terraform destroy` deletes the webhook and archives the environment. The v1
-webhook update/delete flow with a supplied signing key is covered by mocks;
-real-API confirmation remains open in [`GAPS.md`](../../GAPS.md).
+webhook update/delete flow with a supplied signing key passed the real-API
+acceptance tests in `production`; custom environments such as this one are
+still listed as open in [`GAPS.md`](../../GAPS.md).
