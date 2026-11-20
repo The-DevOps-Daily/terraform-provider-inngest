@@ -16,7 +16,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26.x'
+          check-latest: true
           cache: true
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
@@ -27,7 +28,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26.x'
+          check-latest: true
           cache: true
       # The plan/apply/import tests run the real Terraform CLI against an
       # in-process fake of the Inngest API.
@@ -55,7 +57,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26.x'
+          check-latest: true
           cache: true
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
@@ -99,7 +102,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26.x'
+          check-latest: true
           cache: true
       # Run golangci-lint with `go run` so it is built with the module's Go
       # version; prebuilt binaries can lag it and refuse to load the config.
@@ -115,7 +119,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version-file: go.mod
+          go-version: '1.26.x'
+          check-latest: true
           cache: true
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
