@@ -211,7 +211,7 @@ environment slot. Archived `tf-acc-` environments can be left as they are.
 This project is maintained by [DevOps Daily](https://devops-daily.com).
 Read more in the [DevOps Daily posts](https://devops-daily.com/posts).
 
-<!-- announcement post link -->
+Read the announcement and walkthrough: [Manage Inngest with Terraform](https://devops-daily.com/posts/inngest-terraform-provider).
 
 See the [contribution guide](CONTRIBUTING.md), [security policy](SECURITY.md)
 and [changelog](CHANGELOG.md).
